@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 
 describe('LIFE-OS fitness tracker', () => {
+  beforeEach(() => localStorage.clear())
   it('shows the dashboard and navigates to fitness', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -21,6 +22,6 @@ describe('LIFE-OS fitness tracker', () => {
     const firstAddSet = screen.getAllByRole('button', { name: /Satz hinzufügen/i })[0]
     await user.click(firstAddSet)
     expect(screen.getAllByLabelText(/Gewicht/).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('button', { name: /Satz hinzufügen/i })).toHaveLength(2)
+    expect(screen.getAllByLabelText(/Gewicht/)).toHaveLength(4)
   })
 })
