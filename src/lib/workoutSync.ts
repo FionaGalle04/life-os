@@ -1,222 +1,84 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import { parseSessions } from './workouts'
+import { WorkoutStore, type WorkoutRemote } from './workoutStore'
 
-export type Sport = 'Gym' | 'Radfahren' | 'Laufen' | 'Schwimmen'
-export type SetEntry = { id: string; weight: string; reps: string; rir: string }
-export type Exercise = { id: string; name: string; sets: SetEntry[] }
-export type Session = {
-  id: string
-  sport: Sport
-  title: string
-  date: string
-  duration: number
-  distance: string
-  exercises: Exercise[]
-}
+export type { Sport, SetEntry, Exercise, Session } from './workouts'
+const client = supabase
+const remote: WorkoutRemote | null = client ? {
+  async load(ownerId) {
+    const { data, error } = await client.from('workout_sessions').select('session').eq('user_id', ownerId)
+    if (error) throw error
+    return parseSessions((data ?? []).map(row => row.session))
+  },
+  async save(ownerId, sessions) {
+    const { error } = await client.from('workout_sessions').upsert(sessions.map(session => ({ id: session.id, user_id: ownerId, session, updated_at: new Date().toISOString() })), { onConflict: 'id' })
+    if (error) throw error
+  },
+  async remove(ownerId, ids) {
+    const { error } = await client.from('workout_sessions').delete().eq('user_id', ownerId).in('id', ids)
+    if (error) throw error
+  },
+} : null
 
-const STORAGE_KEY = 'life-os-workouts-v1'
-const userStorageKey = (userId: string) => `${STORAGE_KEY}:${userId}`
-const isRealSession = (session: Session) => !session.id.startsWith('demo-')
-
-function readSessions(key: string, fallback: Session[]): Session[] {
-  try {
-    const stored = localStorage.getItem(key)
-    const parsed: unknown = stored ? JSON.parse(stored) : fallback
-    return Array.isArray(parsed) ? parsed as Session[] : fallback
-  } catch {
-    return fallback
-  }
-}
-
-function mergeSessions(...lists: Session[][]): Session[] {
-  const merged = new Map<string, Session>()
-  for (const list of lists) {
-    for (const session of list) {
-      if (session && typeof session.id === 'string' && isRealSession(session)) {
-        merged.set(session.id, session)
-      }
+export function useWorkoutSync() {
+  const [store] = useState(() => {
+    try { return new WorkoutStore(window.localStorage, remote) }
+    catch {
+      const unavailable = { getItem: () => { throw new Error('storage unavailable') } } as unknown as Storage
+      return new WorkoutStore(unavailable, remote)
     }
-  }
-  return [...merged.values()].sort((a, b) => b.date.localeCompare(a.date))
-}
-
-export function useWorkoutSync(fallback: Session[]) {
-  const [sessions, setSessions] = useState<Session[]>(() => readSessions(STORAGE_KEY, fallback))
+  })
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const [user, setUser] = useState<User | null>(null)
-  const [sessionsOwnerId, setSessionsOwnerId] = useState<string | null>(null)
-  const [authReady, setAuthReady] = useState(false)
-  const [syncStatus, setSyncStatus] = useState<'loading' | 'local' | 'syncing' | 'synced' | 'error'>('loading')
-  const [syncMessage, setSyncMessage] = useState('')
-  const lastSyncedIds = useRef<Set<string>>(new Set())
-
+  const [authError, setAuthError] = useState('')
   useEffect(() => {
-    if (!supabase) {
-      setAuthReady(true)
-      setSyncStatus('local')
-      setSyncMessage('Nur auf diesem Gerät gespeichert')
-      return
-    }
-
     let active = true
-    supabase.auth.getSession().then(({ data, error }) => {
+    let authObserved = false
+    const selectUser = (next: User | null) => {
       if (!active) return
-      setUser(data.session?.user ?? null)
-      setAuthReady(true)
-      if (error) {
-        setSyncStatus('error')
-        setSyncMessage('Anmeldung konnte nicht geprüft werden.')
-      }
-    })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!active) return
-      setUser(session?.user ?? null)
-      if (event === 'SIGNED_OUT') {
-        setSessionsOwnerId(null)
-        setSessions(fallback)
-        lastSyncedIds.current = new Set()
-      }
-      setAuthReady(true)
-    })
-
-    return () => {
-      active = false
-      subscription.unsubscribe()
+      setUser(next)
+      store.switchOwner(next?.id ?? null)
     }
-  }, [])
-
+    if (!client) { selectUser(null); return () => { active = false } }
+    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+      authObserved = true
+      // Do not await Supabase calls inside its auth callback.
+      queueMicrotask(() => selectUser(session?.user ?? null))
+    })
+    void client.auth.getSession().then(({ data, error }) => {
+      if (!active || authObserved) return
+      if (error) setAuthError('Anmeldung konnte nicht geprüft werden. Du kannst lokal weiterarbeiten.')
+      selectUser(data.session?.user ?? null)
+    }).catch(() => {
+      if (!active || authObserved) return
+      setAuthError('Anmeldung konnte nicht geprüft werden. Du kannst lokal weiterarbeiten.')
+      selectUser(null)
+    })
+    return () => { active = false; subscription.unsubscribe() }
+  }, [store])
   useEffect(() => {
-    if (!authReady) return
-    const client = supabase
-    if (!user || !client) {
-      setSyncStatus('local')
-      setSyncMessage('Nur auf diesem Gerät gespeichert')
-      return
-    }
-
-    let active = true
-    setSyncStatus('syncing')
-    setSyncMessage('Trainings werden synchronisiert …')
-
-    const load = async () => {
-      const legacy = readSessions(STORAGE_KEY, []).filter(isRealSession)
-      const cached = readSessions(userStorageKey(user.id), []).filter(isRealSession)
-      const { data, error } = await client
-        .from('workout_sessions')
-        .select('id, session')
-        .order('created_at', { ascending: false })
-
-      if (!active) return
-      if (error) {
-        setSyncStatus('error')
-        setSyncMessage('Synchronisierung fehlgeschlagen. Lokale Daten bleiben erhalten.')
-        return
-      }
-
-      const cloud = (data ?? []).map(row => row.session as Session)
-      const merged = mergeSessions(cloud, legacy, cached)
-      if (merged.length) {
-        const { error: saveError } = await client
-          .from('workout_sessions')
-          .upsert(merged.map(session => ({ id: session.id, session })), { onConflict: 'id' })
-        if (!active) return
-        if (saveError) {
-          setSyncStatus('error')
-          setSyncMessage('Synchronisierung fehlgeschlagen. Lokale Daten bleiben erhalten.')
-          return
-        }
-      }
-
-      localStorage.setItem(userStorageKey(user.id), JSON.stringify(merged))
-      if (legacy.length) localStorage.removeItem(STORAGE_KEY)
-      lastSyncedIds.current = new Set(merged.map(session => session.id))
-      setSessionsOwnerId(user.id)
-      setSessions(merged.length ? merged : readSessions(userStorageKey(user.id), fallback).filter(isRealSession))
-      setSyncStatus('synced')
-      setSyncMessage('Auf diesem Gerät synchronisiert')
-    }
-
-    void load()
-    return () => { active = false }
-  }, [authReady, user?.id, fallback])
-
-  useEffect(() => {
-    if (!authReady) return
-
-    const client = supabase
-    if (!user || !client) {
-      if (sessionsOwnerId !== null) return
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
-      return
-    }
-    if (sessionsOwnerId !== user.id) return
-
-    const realSessions = sessions.filter(isRealSession)
-    localStorage.setItem(userStorageKey(user.id), JSON.stringify(realSessions))
-    if (syncStatus !== 'synced') return
-
-    const nextIds = new Set(realSessions.map(session => session.id))
-    const removedIds = [...lastSyncedIds.current].filter(id => !nextIds.has(id))
-    lastSyncedIds.current = nextIds
-
-    let active = true
-    setSyncStatus('syncing')
-    setSyncMessage('Trainings werden synchronisiert …')
-    const save = async () => {
-      if (removedIds.length) {
-        const { error } = await client
-          .from('workout_sessions')
-          .delete()
-          .in('id', removedIds)
-        if (error) throw error
-      }
-      if (realSessions.length) {
-        const { error } = await client
-          .from('workout_sessions')
-          .upsert(realSessions.map(session => ({ id: session.id, session })), { onConflict: 'id' })
-        if (error) throw error
-      }
-      if (active) {
-        setSyncStatus('synced')
-        setSyncMessage('Auf diesem Gerät synchronisiert')
-      }
-    }
-
-    void save().catch(() => {
-      if (active) {
-        setSyncStatus('error')
-        setSyncMessage('Synchronisierung fehlgeschlagen. Lokale Daten bleiben erhalten.')
-      }
-    })
-    return () => { active = false }
-  }, [authReady, user?.id, sessions, sessionsOwnerId, syncStatus])
-
-  const resetSessions = () => {
-    if (!window.confirm('Trainingsjournal und synchronisierte Trainings wirklich zurücksetzen?')) return
-    setSessions(fallback)
-  }
-
-  const sendMagicLink = async (email: string) => {
-    if (!supabase) return { error: new Error('Supabase ist noch nicht konfiguriert.') }
-    return supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.href },
-    })
-  }
-
-  const signOut = async () => {
-    if (supabase) await supabase.auth.signOut()
-  }
-
+    const refresh = () => { if (document.visibilityState === 'visible') void store.sync() }
+    window.addEventListener('online', refresh)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+  }, [store])
   return {
-    sessions,
-    setSessions: setSessions as Dispatch<SetStateAction<Session[]>>,
-    user,
-    syncStatus,
-    syncMessage,
-    resetSessions,
-    sendMagicLink,
-    signOut,
-    isSyncConfigured: Boolean(supabase),
+    sessions: snapshot.sessions, setSessions: store.setSessions, user, ready: snapshot.ready,
+    ownerId: snapshot.ownerId, syncStatus: snapshot.status, syncMessage: authError || snapshot.message,
+    storageError: snapshot.storageError, localCount: snapshot.localCount,
+    retrySync: store.sync, importLocal: store.importLocal, isSyncConfigured: Boolean(client),
+    sendMagicLink: async (email: string) => {
+      if (!client) return { error: new Error('Cloud-Sync ist noch nicht eingerichtet.') }
+      try { return await client.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}` } }) }
+      catch { return { error: new Error('Der Anmeldelink konnte nicht gesendet werden. Bitte erneut versuchen.') } }
+    },
+    signOut: async () => {
+      if (!client) return
+      const { error } = await client.auth.signOut()
+      if (error) throw error
+    },
   }
 }

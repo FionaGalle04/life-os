@@ -18,3 +18,46 @@
   .auth-summary { max-width: 120px; padding: 7px 9px; }
   .auth-popover { right: -110px; }
 }
+
+/* Workout controls remain comfortably usable on small touchscreens. */
+button:disabled{cursor:not-allowed;opacity:.55}
+.workout-editor fieldset{padding:0;margin:0;border:0;min-width:0}
+textarea,select{font:inherit;color:var(--ink);background:#fcf8f3;border:1px solid #d8c6bd;border-radius:8px;padding:10px;max-width:100%}
+input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--wine);outline-offset:2px}
+.session-notes{display:grid;gap:8px;font-size:12px;margin-top:20px}
+.session-notes textarea{resize:vertical;width:100%}
+.set-notes{font-size:11px;color:#765a63;padding:4px 0 6px 36px}
+.set-notes summary{cursor:pointer;min-height:30px;display:list-item;align-content:center}
+.set-notes input{border:1px solid #d8c6bd;padding:10px;border-radius:8px;width:100%}
+.inline-error,.inline-success{padding:12px 15px;border-radius:10px;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.inline-error{background:#f5e2e2;color:#6b2438;border:1px solid #dcaeb5}
+.inline-success{background:#e5e8dd;color:#3e4934}
+.draft-banner{display:flex;align-items:center;gap:14px;background:#e9dfe7;border:1px solid #cbb4c3;border-radius:12px;padding:16px;margin-bottom:16px;font-size:13px}
+.draft-banner>div{flex:1}.draft-banner p{margin:6px 0 0}
+.history-toolbar,.backup-actions{display:flex;align-items:center;gap:16px;justify-content:space-between;flex-wrap:wrap;margin-bottom:20px}
+.history-toolbar label{display:grid;gap:7px;font-size:12px}.backup-actions{margin:0}
+.history-actions{display:flex;gap:4px}.history-main p{font-size:12px;line-height:1.5;margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.history-main strong{overflow-wrap:anywhere}.history-item{align-items:flex-start}.history-actions .tiny-icon-button{min-height:44px;min-width:44px}
+.workout-editor input,.workout-editor textarea,.workout-editor select{font-size:16px;min-height:44px}
+.workout-editor .tiny-icon-button,.workout-editor .set-delete{min-height:44px;min-width:44px}
+.workout-editor .set-row{grid-template-columns:28px minmax(0,1fr) minmax(0,1fr) minmax(0,.65fr) 44px;gap:5px}
+.workout-editor .set-header span{font-size:10px}.exercise-actions .text-button{min-height:44px;font-size:12px}
+.workout-editor .editor-meta label,.workout-editor .editor-footer>span{font-size:12px;color:#705960}
+.workout-editor .muted-small{color:#705960;font-size:11px}
+.subtle-button,.primary-button,.sport-tab,.nav-item,.timer-control{min-height:44px}
+.backup-actions .subtle-button{font-size:12px;color:var(--wine)}
+.sync-strip{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:12px 42px;background:#e9ece3;color:#45563c;font-size:12px;line-height:1.5}
+.sync-strip.sync-error{background:#f5e2e2;color:var(--wine)}.sync-strip .text-button{min-height:32px;font-size:12px;white-space:nowrap}
+.auth-summary{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:44px;align-content:center}
+.auth-popover{max-width:calc(100vw - 24px)}.auth-popover input{min-height:44px;font-size:16px}.auth-popover small{font-size:12px;line-height:1.5;color:#705960}
+.account-actions{display:grid;gap:6px}.account-actions .subtle-button{color:var(--wine);font-size:12px;text-align:left}
+@media(max-width:540px){
+  .auth-popover{position:fixed;left:12px;right:12px;top:70px;width:auto;max-width:none}
+  .today-pill{display:none}.auth-summary{max-width:140px}.sync-strip{padding:10px 13px;font-size:11px}
+  .draft-banner{align-items:stretch;flex-direction:column;gap:8px}.draft-banner .subtle-button{justify-content:center}
+  .history-item{flex-wrap:wrap}.history-main{flex-basis:calc(100% - 50px)}.history-actions{width:100%;justify-content:flex-end}
+  .workout-editor .set-row{grid-template-columns:18px minmax(0,1fr) minmax(0,1fr) minmax(0,.65fr) 44px;gap:3px}
+  .workout-editor .set-header span{font-size:8px}.exercise-title .exercise-name{padding:8px 2px}
+  .workout-editor .editor-meta{grid-template-columns:1fr 1fr}.workout-editor .set-row input{font-size:16px}
+  .rest-timer{flex-wrap:wrap}.timer-control{font-size:12px}.rest-timer .tiny-icon-button{min-width:44px;min-height:44px}
+}

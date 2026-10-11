@@ -8,9 +8,12 @@ type Props = {
   isSyncConfigured: boolean
   sendMagicLink: (email: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
+  retrySync: () => Promise<void>
+  localCount: number
+  importLocal: () => void
 }
 
-export function AuthControls({ user, syncStatus, syncMessage, isSyncConfigured, sendMagicLink, signOut }: Props) {
+export function AuthControls({ user, syncStatus, syncMessage, isSyncConfigured, sendMagicLink, signOut, retrySync, localCount, importLocal }: Props) {
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -19,9 +22,18 @@ export function AuthControls({ user, syncStatus, syncMessage, isSyncConfigured, 
     event.preventDefault()
     setBusy(true)
     setMessage('')
-    const { error } = await sendMagicLink(email.trim())
-    setMessage(error ? error.message : 'Anmeldelink ist unterwegs. Schau in dein Postfach.')
-    setBusy(false)
+    try {
+      const { error } = await sendMagicLink(email.trim())
+      setMessage(error ? error.message : 'Anmeldelink ist unterwegs. Schau in dein Postfach.')
+    } catch { setMessage('Der Anmeldelink konnte nicht gesendet werden. Bitte erneut versuchen.') }
+    finally { setBusy(false) }
+  }
+
+  const logout = async () => {
+    setBusy(true)
+    try { await signOut(); setMessage('') }
+    catch { setMessage('Abmelden fehlgeschlagen. Bitte erneut versuchen.') }
+    finally { setBusy(false) }
   }
 
   return <details className="auth-controls">
@@ -29,14 +41,14 @@ export function AuthControls({ user, syncStatus, syncMessage, isSyncConfigured, 
     <div className="auth-popover">
       <strong>{user ? 'Dein LIFE-OS Konto' : 'Auf mehreren Geräten nutzen'}</strong>
       <p>{syncMessage}</p>
-      {!isSyncConfigured ? <small>Die Synchronisierung wird nach der Einrichtung der GitHub-Pages-Variablen verfügbar.</small> :
-        user ? <button className="subtle-button" onClick={() => void signOut()}>Abmelden</button> :
+      {!isSyncConfigured ? <small>Cloud-Sync ist hier noch nicht eingerichtet. Du kannst Trainings auf diesem Gerät speichern und als Datei sichern.</small> :
+        user ? <div className="account-actions"><button className="subtle-button" disabled={busy} onClick={() => void logout()}>Abmelden</button><button className="subtle-button" disabled={syncStatus === 'syncing'} onClick={() => void retrySync()}>Jetzt synchronisieren</button>{localCount > 0 && <button className="subtle-button" onClick={importLocal}>{localCount} lokale Trainings in dieses Konto übernehmen</button>}</div> :
           <form onSubmit={submit}>
             <label htmlFor="sync-email">E-Mail-Adresse</label>
             <input id="sync-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} />
             <button className="primary-button" disabled={busy || syncStatus === 'loading'}>{busy ? 'Sende …' : 'Anmeldelink senden'}</button>
-            {message && <small role="status">{message}</small>}
           </form>}
+      {message && <small role="status">{message}</small>}
     </div>
   </details>
 }
