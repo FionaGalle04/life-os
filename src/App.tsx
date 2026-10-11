@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AuthControls } from './components/AuthControls'
 import { useWorkoutSync, type Exercise, type Session, type SetEntry, type Sport } from './lib/workoutSync'
 import {
@@ -54,7 +54,6 @@ function App() {
     const interval = window.setInterval(() => setSeconds(s => s > 0 ? s - 1 : 0), 1000)
     return () => window.clearInterval(interval)
   }, [timerOn])
-  const gymSessions = useMemo(() => sessions.filter(s => s.sport === 'Gym'), [sessions])
   const totalMinutes = sessions.reduce((sum, s) => sum + (Number(s.duration) || 0), 0)
   const totalKm = sessions.reduce((sum, s) => sum + (Number(s.distance) || 0), 0)
   const formattedDate = dateLabel.format(new Date())
