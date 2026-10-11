@@ -15,7 +15,8 @@
     "lucide-react": "^0.468.0",
     "react": "latest",
     "react-dom": "latest",
-    "vite": "latest"
+    "vite": "latest",
+    "@supabase/supabase-js": "latest"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
