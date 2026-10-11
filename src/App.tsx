@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { AuthControls } from './components/AuthControls'
+import { useWorkoutSync, type Exercise, type Session, type SetEntry, type Sport } from './lib/workoutSync'
 import {
   Activity, ArrowUpRight, BookOpen, CalendarDays, Check, ChevronDown,
   CircleHelp, Clock3, Dumbbell, Flower2, Footprints, Heart, LayoutDashboard, Leaf,
@@ -6,11 +8,6 @@ import {
   Bike, Trash2, Wallet, type LucideIcon
 } from 'lucide-react'
 
-type Sport = 'Gym' | 'Radfahren' | 'Laufen' | 'Schwimmen'
-type SetEntry = { id: string; weight: string; reps: string; rir: string }
-type Exercise = { id: string; name: string; sets: SetEntry[] }
-type Session = { id: string; sport: Sport; title: string; date: string; duration: number; distance: string; exercises: Exercise[] }
-const STORAGE_KEY = 'life-os-workouts-v1'
 const sportOptions: { name: Sport; icon: LucideIcon; tint: string }[] = [
   { name: 'Gym', icon: Dumbbell, tint: 'rose' },
   { name: 'Radfahren', icon: Bike, tint: 'sage' },
@@ -38,14 +35,8 @@ const navItems = [
   { label: 'Finanzen', icon: Wallet },
   { label: 'Fokus', icon: Timer },
 ]
-function readSessions(): Session[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) as Session[] : initialSessions
-  } catch { return initialSessions }
-}
 function App() {
-  const [sessions, setSessions] = useState<Session[]>(readSessions)
+  const { sessions, setSessions, user, syncStatus, syncMessage, resetSessions, sendMagicLink, signOut, isSyncConfigured } = useWorkoutSync(initialSessions)
   const [activeNav, setActiveNav] = useState('Übersicht')
   const [sport, setSport] = useState<Sport>('Gym')
   const [title, setTitle] = useState('Ganzkörper')
@@ -58,7 +49,6 @@ function App() {
   const [timerOn, setTimerOn] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)) }, [sessions])
   useEffect(() => {
     if (!timerOn) return
     const interval = window.setInterval(() => setSeconds(s => s > 0 ? s - 1 : 0), 1000)
@@ -75,7 +65,7 @@ function App() {
     const session: Session = { id: uid(), sport, title: title.trim(), date: today(), duration: Number(duration) || 0, distance, exercises: sport === 'Gym' ? exercises : [] }
     setSessions(current => [session, ...current])
     setEditing(false)
-    setNotice('Training wurde lokal gespeichert ✦')
+    setNotice(user ? 'Training synchronisiert ✦' : 'Training wurde lokal gespeichert ✦')
     window.setTimeout(() => setNotice(''), 3200)
     setTitle(sport === 'Gym' ? 'Ganzkörper' : sport)
     setDistance('')
@@ -106,7 +96,7 @@ function App() {
     </aside>
     {mobileMenu && <button className="scrim" aria-label="Menü schließen" onClick={() => setMobileMenu(false)}/>}
     <main className="main-content">
-      <header className="topbar"><button className="icon-button mobile-only" aria-label="Menü öffnen" onClick={() => setMobileMenu(!mobileMenu)}><Menu size={20}/></button><div className="breadcrumb">DEIN SPACE <span>/</span> {activeNav.toUpperCase()}</div><div className="top-actions"><span className="today-pill"><span className="live-dot"/> {formattedDate}</span><button className="icon-button" aria-label="Optionen"><MoreHorizontal size={21}/></button><div className="mini-avatar">F</div></div></header>
+      <header className="topbar"><button className="icon-button mobile-only" aria-label="Menü öffnen" onClick={() => setMobileMenu(!mobileMenu)}><Menu size={20}/></button><div className="breadcrumb">DEIN SPACE <span>/</span> {activeNav.toUpperCase()}</div><div className="top-actions"><AuthControls user={user} syncStatus={syncStatus} syncMessage={syncMessage} isSyncConfigured={isSyncConfigured} sendMagicLink={sendMagicLink} signOut={signOut}/><span className="today-pill"><span className="live-dot"/> {formattedDate}</span><button className="icon-button" aria-label="Optionen"><MoreHorizontal size={21}/></button><div className="mini-avatar">F</div></div></header>
       {activeNav === 'Fitness' ? <section className="page-wrap">
         <div className="page-heading"><div><div className="eyebrow"><Flower2 size={14}/> MOVE WITH INTENTION</div><h1>Dein Training<span className="title-period">.</span></h1><p className="subtitle">Jede Bewegung zählt. Tracke deinen Weg, nicht nur die Zahlen.</p></div><button className="primary-button" onClick={() => startNew()}><Plus size={17}/> Training starten</button></div>
         <div className="sport-tabs">{sportOptions.map(({name, icon: Icon, tint}) => <button key={name} className={`sport-tab ${sport === name && editing ? 'selected' : ''}`} onClick={() => startNew(name)}><span className={`sport-icon ${tint}`}><Icon size={19}/></span><span>{name}</span></button>)}</div>
@@ -121,10 +111,10 @@ function App() {
             </div>)}
             <button className="add-exercise" onClick={() => setExercises(current => [...current, newExercise()])}><Plus size={17}/> Weitere Übung hinzufügen</button>
           </div> : <div className="endurance-note"><div className="sport-icon sage"><Activity size={21}/></div><div><strong>Ausdauer-Session</strong><p>Trage Dauer und Distanz ein. Höhenmeter und detaillierte Daten ergänzen wir im nächsten Schritt.</p></div></div>}
-          <div className="editor-footer"><span><Save size={15}/> Wird auf diesem Gerät gespeichert</span><button className="primary-button" onClick={saveSession}><Check size={17}/> Training speichern</button></div>
+          <div className="editor-footer"><span><Save size={15}/> {user ? 'Wird mit deinen Geräten synchronisiert' : 'Wird auf diesem Gerät gespeichert'}</span><button className="primary-button" onClick={saveSession}><Check size={17}/> Training speichern</button></div>
         </section>}
         <div className="fitness-stats"><div className="stat-card"><span className="stat-icon rose"><Dumbbell size={18}/></span><span className="stat-label">TRAININGS GESAMT</span><strong>{sessions.length}</strong><small>Sessions gespeichert</small></div><div className="stat-card"><span className="stat-icon sage"><Clock3 size={18}/></span><span className="stat-label">BEWEGUNGSZEIT</span><strong>{Math.floor(totalMinutes / 60)}<small> h </small>{totalMinutes % 60}<small> min</small></strong><small>über alle Sportarten</small></div><div className="stat-card"><span className="stat-icon mauve"><Footprints size={18}/></span><span className="stat-label">DISTANZ GESAMT</span><strong>{totalKm.toLocaleString('de-DE', { maximumFractionDigits: 1 })}<small> km</small></strong><small>Radfahren & Laufen</small></div></div>
-        <div className="history-panel"><div className="panel-heading"><div><div className="eyebrow">DEIN WEG BISHER</div><h2>Trainingsjournal</h2></div><button className="subtle-button" onClick={() => { setSessions(initialSessions); localStorage.removeItem(STORAGE_KEY); }}>Demo-Daten zurücksetzen <RotateCcw size={14}/></button></div>
+        <div className="history-panel"><div className="panel-heading"><div><div className="eyebrow">DEIN WEG BISHER</div><h2>Trainingsjournal</h2></div><button className="subtle-button" onClick={resetSessions}>Demo-Daten zurücksetzen <RotateCcw size={14}/></button></div>
           {sessions.length === 0 ? <div className="empty-state"><Flower2 size={30}/><h3>Hier beginnt deine Geschichte</h3><p>Dein erstes Training wartet auf dich.</p><button className="primary-button" onClick={() => startNew()}>Erstes Training eintragen</button></div> : <div className="history-list">{sessions.map(session => { const opt = sportOptions.find(o => o.name === session.sport)!; const Icon = opt.icon; return <article className="history-item" key={session.id}><span className={`history-icon ${opt.tint}`}><Icon size={20}/></span><div className="history-main"><strong>{session.title}</strong><span>{session.date === today() ? 'Heute' : session.date} · {session.duration} min{session.distance ? ` · ${session.distance} km` : ''}</span><small>{session.sport === 'Gym' ? `${session.exercises.length} Übungen · ${session.exercises.reduce((n, e) => n + e.sets.length, 0)} Sätze` : session.sport}</small></div><button className="tiny-icon-button" aria-label={`Training ${session.title} als Vorlage verwenden`} onClick={() => repeatSession(session)} title="Als Vorlage verwenden"><RotateCcw size={16}/></button><button className="tiny-icon-button" aria-label={`Training ${session.title} löschen`} onClick={() => setSessions(current => current.filter(s => s.id !== session.id))}><Trash2 size={16}/></button></article>})}</div>}
         </div>
         {notice && <div role="status" className="toast"><Check size={17}/>{notice}</div>}
