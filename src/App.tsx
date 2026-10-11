@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Activity, ArrowDownRight, ArrowUpRight, BookOpen, CalendarDays, Check, ChevronDown,
+  Activity, ArrowUpRight, BookOpen, CalendarDays, Check, ChevronDown,
   CircleHelp, Clock3, Dumbbell, Flower2, Footprints, Heart, LayoutDashboard, Leaf,
   Menu, MoreHorizontal, Music2, Plus, RotateCcw, Save, Sparkles, Timer, Waves, X,
-  Bike, Trash2, Trophy, Wallet, type LucideIcon
+  Bike, Trash2, Wallet, type LucideIcon
 } from 'lucide-react'
 
 type Sport = 'Gym' | 'Radfahren' | 'Laufen' | 'Schwimmen'
