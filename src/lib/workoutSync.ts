@@ -143,7 +143,8 @@ export function useWorkoutSync(fallback: Session[]) {
   useEffect(() => {
     if (!authReady) return
 
-    if (!user || !supabase) {
+    const client = supabase
+    if (!user || !client) {
       if (sessionsOwnerId !== null) return
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
       return
