@@ -87,7 +87,8 @@ export function useWorkoutSync(fallback: Session[]) {
 
   useEffect(() => {
     if (!authReady) return
-    if (!user || !supabase) {
+    const client = supabase
+    if (!user || !client) {
       setSyncStatus('local')
       setSyncMessage('Nur auf diesem Gerät gespeichert')
       return
@@ -100,7 +101,7 @@ export function useWorkoutSync(fallback: Session[]) {
     const load = async () => {
       const legacy = readSessions(STORAGE_KEY, []).filter(isRealSession)
       const cached = readSessions(userStorageKey(user.id), []).filter(isRealSession)
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from('workout_sessions')
         .select('id, session')
         .order('created_at', { ascending: false })
@@ -115,7 +116,7 @@ export function useWorkoutSync(fallback: Session[]) {
       const cloud = (data ?? []).map(row => row.session as Session)
       const merged = mergeSessions(cloud, legacy, cached)
       if (merged.length) {
-        const { error: saveError } = await supabase
+        const { error: saveError } = await client
           .from('workout_sessions')
           .upsert(merged.map(session => ({ id: session.id, session })), { onConflict: 'id' })
         if (!active) return
@@ -162,14 +163,14 @@ export function useWorkoutSync(fallback: Session[]) {
     setSyncMessage('Trainings werden synchronisiert …')
     const save = async () => {
       if (removedIds.length) {
-        const { error } = await supabase
+        const { error } = await client
           .from('workout_sessions')
           .delete()
           .in('id', removedIds)
         if (error) throw error
       }
       if (realSessions.length) {
-        const { error } = await supabase
+        const { error } = await client
           .from('workout_sessions')
           .upsert(realSessions.map(session => ({ id: session.id, session })), { onConflict: 'id' })
         if (error) throw error
