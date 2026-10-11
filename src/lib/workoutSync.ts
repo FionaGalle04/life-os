@@ -44,6 +44,7 @@ function mergeSessions(...lists: Session[][]): Session[] {
 export function useWorkoutSync(fallback: Session[]) {
   const [sessions, setSessions] = useState<Session[]>(() => readSessions(STORAGE_KEY, fallback))
   const [user, setUser] = useState<User | null>(null)
+  const [sessionsOwnerId, setSessionsOwnerId] = useState<string | null>(null)
   const [authReady, setAuthReady] = useState(false)
   const [syncStatus, setSyncStatus] = useState<'loading' | 'local' | 'syncing' | 'synced' | 'error'>('loading')
   const [syncMessage, setSyncMessage] = useState('')
@@ -67,9 +68,14 @@ export function useWorkoutSync(fallback: Session[]) {
         setSyncMessage('Anmeldung konnte nicht geprüft werden.')
       }
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return
       setUser(session?.user ?? null)
+      if (event === 'SIGNED_OUT') {
+        setSessionsOwnerId(null)
+        setSessions(fallback)
+        lastSyncedIds.current = new Set()
+      }
       setAuthReady(true)
     })
 
@@ -123,6 +129,7 @@ export function useWorkoutSync(fallback: Session[]) {
       localStorage.setItem(userStorageKey(user.id), JSON.stringify(merged))
       if (legacy.length) localStorage.removeItem(STORAGE_KEY)
       lastSyncedIds.current = new Set(merged.map(session => session.id))
+      setSessionsOwnerId(user.id)
       setSessions(merged.length ? merged : readSessions(userStorageKey(user.id), fallback).filter(isRealSession))
       setSyncStatus('synced')
       setSyncMessage('Auf diesem Gerät synchronisiert')
@@ -136,9 +143,11 @@ export function useWorkoutSync(fallback: Session[]) {
     if (!authReady) return
 
     if (!user || !supabase) {
+      if (sessionsOwnerId !== null) return
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
       return
     }
+    if (sessionsOwnerId !== user.id) return
 
     const realSessions = sessions.filter(isRealSession)
     localStorage.setItem(userStorageKey(user.id), JSON.stringify(realSessions))
@@ -178,7 +187,7 @@ export function useWorkoutSync(fallback: Session[]) {
       }
     })
     return () => { active = false }
-  }, [authReady, user?.id, sessions, syncStatus])
+  }, [authReady, user?.id, sessions, sessionsOwnerId, syncStatus])
 
   const resetSessions = () => {
     if (!window.confirm('Trainingsjournal und synchronisierte Trainings wirklich zurücksetzen?')) return
